@@ -1,5 +1,102 @@
-# devtools for epbf
+# 基本概念
+## ebpf是什么？
+eBPF（扩展伯克利包过滤器）是一种革命性的 Linux 内核技术，允许用户在不修改内核源代码或加载内核模块的情况下，安全、高效地运行自定义程序。
+它通过在内核中运行一个受限制的虚拟机（eBPF VM），提供了一种动态注入代码的能力，广泛应用于网络、监控、安全、性能分析，调度器优化，存储加速等领域。
+## BPF程序类型和Helper类型
+BPF程序类型定义了义了程序可以附加到内核的哪些钩子（hook），并限制其允许的操作，决定了eBPF 能做什么。
+helper函数是 eBPF 程序与内核交互的接口，允许安全地访问内核数据或执行受限操作
+doc: https://docs.kernel.org/bpf/helpers.html
+全部类型参考 https://elixir.bootlin.com/linux/v6.13.7/source/include/uapi/linux/bpf.h
+https://elixir.bootlin.com/linux/v6.13.7/source/tools/lib/bpf/bpf_helpers.h
+### 程序类型
+1. 网络类程序
+- BPF_PROG_TYPE_SOCKET_FILTER
+用途：过滤套接字接收的数据包（类似 tcpdump）。
+钩子点：socket 的 SO_ATTACH_BPF 选项。
+- BPF_PROG_TYPE_XDP
+用途：在网络驱动层（早于内核协议栈）处理数据包，用于高性能网络过滤、转发或 DDoS 防护。
+钩子点：XDP（eXpress Data Path）挂载到网卡驱动。
+- BPF_PROG_TYPE_SCHED_CLS
+用途：流量分类（Traffic Control 子系统），替代 tc 的 classifier。
+钩子点：Linux 流量控制层（sch_clsact）。
+- BPF_PROG_TYPE_SCHED_ACT
+用途：流量动作执行（如丢弃、重定向数据包）。
+钩子点：流量控制层的 action 阶段。
+- BPF_PROG_TYPE_CGROUP_SKB
+用途：控制 cgroup 内进程的网络流量（允许/拒绝入站或出站数据包）。
+钩子点：cgroup 的网络流量入口/出口。
+- BPF_PROG_TYPE_SK_LOOKUP
+用途：自定义套接字查找逻辑（如负载均衡）。
+钩子点：内核执行套接字查找时触发。
 
+2. 跟踪与观测类程序
+- BPF_PROG_TYPE_KPROBE
+用途：动态跟踪内核函数的调用或返回（通过 kprobe/kretprobe）。
+钩子点：内核函数入口或返回地址。
+- BPF_PROG_TYPE_TRACEPOINT
+用途：静态跟踪预定义的 tracepoint（如系统调用、文件操作）。
+钩子点：内核预埋的静态跟踪点（/sys/kernel/tracing/events）。
+- BPF_PROG_TYPE_PERF_EVENT
+用途：响应硬件或软件性能事件（如 CPU 缓存未命中、定时采样）。
+钩子点：Perf 事件（perf_event_open）。
+- BPF_PROG_TYPE_RAW_TRACEPOINT
+用途：直接访问原始 tracepoint 参数（无参数格式转换，性能更高）。
+- BPF_PROG_TYPE_FENTRY/FEXIT
+用途：跟踪内核函数入口/退出（替代 kprobe，依赖 BTF 类型信息）。
+钩子点：通过 BTF（BPF Type Format）定位函数边界。
+
+3. 安全类程序
+- BPF_PROG_TYPE_LSM
+用途：实现 Linux 安全模块（LSM）策略（如动态权限检查）。
+钩子点：LSM 钩子（如文件访问、进程创建）。
+- BPF_PROG_TYPE_CGROUP_DEVICE
+用途：控制 cgroup 内进程的设备访问权限。
+4. 其他类型
+- BPF_PROG_TYPE_SYSCALL
+用途：跟踪或过滤系统调用。
+- BPF_PROG_TYPE_STRUCT_OPS
+用途：动态替换内核子系统（如 TCP 拥塞控制算法）。
+
+### helper 函数
+1. 通用助手函数
+- bpf_map_lookup_elem / bpf_map_update_elem
+操作 eBPF 映射（查询、插入键值对）。
+- bpf_trace_printk
+调试输出（类似 printk，但功能有限）。
+- bpf_get_current_pid_tgid
+获取当前进程的 PID 和 TGID。
+- bpf_ktime_get_ns
+获取系统单调时间（纳秒精度）。
+
+2. 网络相关助手
+- bpf_skb_load_bytes / bpf_skb_store_bytes
+读取或修改网络数据包内容。
+- bpf_xdp_adjust_head
+调整 XDP 数据包的头部指针（用于封装/解封装）。
+- bpf_redirect_map
+将数据包重定向到其他网卡或 CPU（用于负载均衡）。
+
+3. 跟踪与上下文访问
+- bpf_probe_read_user / bpf_probe_read_kernel
+安全读取用户或内核空间内存。
+- bpf_get_current_comm
+获取当前进程的进程名。
+- bpf_get_stackid
+捕获用户或内核栈跟踪。
+
+4. 系统调用与安全
+- bpf_send_signal
+向进程发送信号（如强制终止恶意进程）。
+- bpf_override_return
+修改内核函数的返回值（需特权级权限）。
+
+5. 辅助数据结构
+- bpf_spin_lock / bpf_spin_unlock
+对映射中的数据进行同步（防止竞态条件）。
+- bpf_ringbuf_output
+向环形缓冲区写入数据（高性能事件传递）。
+
+# devtools for epbf
 ## bpftrace
 ![ bpftrace_arch](./bpftrace.png)
 ## ubprobe
@@ -7,10 +104,28 @@
 - uretprobe https://lwn.net/Articles/543924/
 ## how USDT works
 https://leezhenghui.github.io/linux/2019/03/05/exploring-usdt-on-linux.html#heading-linux-tracing-technical-stack
+https://docs.ebpf.io/linux/concepts/usdt/
 - In authoring time, Using macro DTRACE_PROBE() to delcare a USDT trace point at appropriate souce code location
 - During compilation, the source code with USDT trace point will be translated into a nop instruction, in the meanwhile, the USDT metadata will be stored in the ELF's .note.stapstd section.
 - When register a probe, USDT tool(usually implemented based on uprobe under the hood) will read the ELF .note.stapstd section, and instrument the instruction from nop to breakpoint(int3 on x86). In such way, whenever control reaches the marker, the interrupt handler for int3 is called, and by turn the uprobe and attached eBPF program get called in kernel to process the events. If the USDT probe associated with semaphores, the front-ends need to incrementing the semaphore’s location via poking /proc/$PID/mem to enable the probe.
 - After deregister the probe, USDT will instrument the instruction from breakpoint back to nop, no event get generated anymore, in the meanwhile, decrementing the semaphore's location to detach the current probe.
+- A semaphore is a number which is incremented when a probe is attached and decremented when detached. This
+allows a program to see if it being traced. 
+- bpf_program__attach_usdt()
+``` C
+/* Copyright (c) 2022 Meta Platforms, Inc. and affiliates. */
+SEC("usdt/./urandom_read:urand:read_without_sema")
+int BPF_USDT(urand_read_without_sema, int iter_num, int iter_cnt, int buf_sz)
+{
+
+}
+
+// SEC can be used to tell libbpf where this program should be auto-attached.
+// Starting with usdt for the program type
+// ./urandom_read for the path to the binary
+// urand for the provider
+// read_without_sema for the tracepoint name
+```
 
 ## BPF CO-RE (Compile Once – Run Everywhere)
 
