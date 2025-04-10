@@ -31,6 +31,16 @@ bpftrace -e 'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(
 - comm是内建变量，代表当前进程的名字。其它类似的变量还有pid和tid，分别表示进程标识和线程标识。
 - args是一个包含所有tracepoint参数的结构。这个结构是由bpftrace根据tracepoint信息自动生成的。
   这个结构的成员可以通过命令bpftrace -vl tracepoint:syscalls:sys_enter_openat
+  ```
+  sudo bpftrace -vl tracepoint:syscalls:sys_enter_openat
+  
+  tracepoint:syscalls:sys_enter_openat
+    int __syscall_nr
+    int dfd
+    const char * filename
+    int flags
+    umode_t mode
+  ```
 
 4. 进程级系统调用计数
 ```
@@ -43,6 +53,7 @@ bpftrace -e 'tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }'
 ```
 bpftrace -e 'tracepoint:syscalls:sys_exit_read /pid == 18644/ { @bytes = hist(args->ret); }'
 ```
+- /.../: This is a filter (aka predicate), which acts as a filter for the action. 
 
 6. 内核动态跟踪read()返回的字节数
 - kretprobe:vfs_read: 这是kretprobe类型(动态跟踪内核函数返回值)的探针，跟踪vfs_read内核函数。
